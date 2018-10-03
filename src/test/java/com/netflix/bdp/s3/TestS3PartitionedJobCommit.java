@@ -207,6 +207,8 @@ public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3Part
     FileSystem mockS3 = getMockS3();
 
     getJob().getConfiguration().set(S3Committer.CONFLICT_MODE, "replace");
+    getJob().getConfiguration().setInt(S3Committer.MAX_NUMBER_ATTEMPTS, 1);
+    getJob().getConfiguration().setInt(S3Committer.NUM_THREADS, 1);
 
     final S3PartitionedOutputCommitter committer = newJobCommitter();
 
@@ -244,6 +246,8 @@ public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3Part
     FileSystem mockS3 = getMockS3();
 
     getJob().getConfiguration().set(S3Committer.CONFLICT_MODE, "replace");
+    getJob().getConfiguration().setInt(S3Committer.MAX_NUMBER_ATTEMPTS, 1);
+    getJob().getConfiguration().setInt(S3Committer.NUM_THREADS, 1);
 
     final S3PartitionedOutputCommitter committer = newJobCommitter();
 
@@ -281,6 +285,8 @@ public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3Part
     FileSystem mockS3 = getMockS3();
 
     getJob().getConfiguration().set(S3Committer.CONFLICT_MODE, "replace");
+    getJob().getConfiguration().setInt(S3Committer.MAX_NUMBER_ATTEMPTS, 1);
+    getJob().getConfiguration().setInt(S3Committer.NUM_THREADS, 1);
 
     final S3PartitionedOutputCommitter committer = newJobCommitter();
 

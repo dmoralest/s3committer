@@ -286,7 +286,12 @@ public class S3Util {
         if (maxAttempts == 0) {
           throw new RuntimeException("The path " + path + " could not be deleted");
         } else {
-          return fs.delete(path, true);
+          if(!fs.delete(path, true)) {
+            throw new IOException("Failed to delete existing " +
+                    "partition directory for replace:" + path);
+          } else {
+            return true;
+          }
         }
       } catch (IOException e) {
         return delete(fs, maxAttempts - 1);
