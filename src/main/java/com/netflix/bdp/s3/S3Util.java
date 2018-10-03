@@ -18,14 +18,9 @@ package com.netflix.bdp.s3;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.AbortMultipartUploadRequest;
-import com.amazonaws.services.s3.model.CompleteMultipartUploadRequest;
-import com.amazonaws.services.s3.model.DeleteObjectRequest;
-import com.amazonaws.services.s3.model.InitiateMultipartUploadRequest;
-import com.amazonaws.services.s3.model.InitiateMultipartUploadResult;
-import com.amazonaws.services.s3.model.PartETag;
-import com.amazonaws.services.s3.model.UploadPartRequest;
-import com.amazonaws.services.s3.model.UploadPartResult;
+import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.*;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableSortedMap;
@@ -264,6 +259,58 @@ public class S3Util {
 
     public String getLocation() {
       return Paths.getParent(key);
+    }
+  }
+
+  public static class DirectoryReplacement {
+    private final Path path;
+
+    public DirectoryReplacement(Path path) {
+      this.path = path;
+    }
+
+    public boolean exists(FileSystem fs, int maxAttempts) {
+      try {
+        if (maxAttempts == 0) {
+          throw new RuntimeException("The path " + path + " could not be listed");
+        } else {
+          return fs.exists(path);
+        }
+      } catch (IOException e) {
+        return exists(fs, maxAttempts - 1);
+      }
+    }
+
+    public boolean delete(FileSystem fs, int maxAttempts) {
+      try {
+        if (maxAttempts == 0) {
+          throw new RuntimeException("The path " + path + " could not be deleted");
+        } else {
+          return fs.delete(path, true);
+        }
+      } catch (IOException e) {
+        return delete(fs, maxAttempts - 1);
+      }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      DirectoryReplacement that = (DirectoryReplacement) o;
+      return Objects.equal(path, that.path);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(path);
+    }
+
+    @Override
+    public String toString() {
+      return "DirectoryReplacement{" +
+              "path=" + path +
+              '}';
     }
   }
 }

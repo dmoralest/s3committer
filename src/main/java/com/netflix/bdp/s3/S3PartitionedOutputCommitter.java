@@ -16,22 +16,19 @@
 
 package com.netflix.bdp.s3;
 
+import com.amazonaws.services.s3.AmazonS3;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.netflix.bdp.s3.util.ConflictResolution;
 import com.netflix.bdp.s3.util.HiddenPathFilter;
 import com.netflix.bdp.s3.util.Paths;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.LocatedFileStatus;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.PathFilter;
-import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.fs.*;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.util.List;
 import java.util.Set;
@@ -41,16 +38,23 @@ public class S3PartitionedOutputCommitter extends S3MultipartOutputCommitter {
 
   private static final Logger LOG = LoggerFactory.getLogger(
       S3PartitionedOutputCommitter.class);
+  private final int maxNumberOfAttempts;
 
   public S3PartitionedOutputCommitter(Path outputPath, JobContext context)
       throws IOException {
     super(outputPath, context);
+    Configuration conf = context.getConfiguration();
+    this.maxNumberOfAttempts = conf.getInt(
+            S3Committer.MAX_NUMBER_ATTEMPTS, S3Committer.DEFAULT_NUM_ATTEMPTS);
   }
 
   public S3PartitionedOutputCommitter(Path outputPath,
                                       TaskAttemptContext context)
       throws IOException {
     super(outputPath, context);
+    Configuration conf = context.getConfiguration();
+    this.maxNumberOfAttempts = conf.getInt(
+            S3Committer.MAX_NUMBER_ATTEMPTS, S3Committer.DEFAULT_NUM_ATTEMPTS);
   }
 
   @Override
@@ -108,7 +112,7 @@ public class S3PartitionedOutputCommitter extends S3MultipartOutputCommitter {
   public void commitJob(JobContext context) throws IOException {
     List<S3Util.PendingUpload> pending = getPendingUploads(context);
 
-    FileSystem s3 = getOutputPath(context)
+    final FileSystem s3 = getOutputPath(context)
         .getFileSystem(context.getConfiguration());
     Set<Path> partitions = Sets.newLinkedHashSet();
     for (S3Util.PendingUpload commit : pending) {
@@ -128,16 +132,39 @@ public class S3PartitionedOutputCommitter extends S3MultipartOutputCommitter {
           // no check is needed because the output may exist for appending
           break;
         case REPLACE:
-          for (Path partitionPath : partitions) {
-            if (s3.exists(partitionPath)) {
-              LOG.info("Removing partition path to be replaced: " +
-                  partitionPath);
-              if (!s3.delete(partitionPath, true /* recursive */)) {
-                throw new IOException("Failed to delete existing " +
-                    "partition directory for replace:" + partitionPath);
-              }
-            }
+          Set<S3Util.DirectoryReplacement> directories = Sets.newLinkedHashSet();
+          for (Path partition : partitions) {
+            directories.add(new S3Util.DirectoryReplacement(partition));
           }
+          final AmazonS3 client = getClient(
+                  getOutputPath(context), context.getConfiguration());
+
+          Tasks.foreach(directories)
+                  .stopOnFailure().throwFailureWhenFinished()
+                  .executeWith(getThreadPool(context))
+                  .onFailure(new Tasks.FailureTask<S3Util.DirectoryReplacement, RuntimeException>() {
+                    @Override
+                    public void run(S3Util.DirectoryReplacement replacement,
+                                    Exception exception) {
+                        LOG.error("Could not verify directory replacement", exception);
+                    }
+                  })
+                  .abortWith(new Tasks.Task<S3Util.DirectoryReplacement, RuntimeException>() {
+                    @Override
+                    public void run(S3Util.DirectoryReplacement replacement) {
+                      LOG.error("Aborting " + replacement);
+                    }
+                  })
+                  .run(new Tasks.Task<S3Util.DirectoryReplacement, RuntimeException>() {
+                    @Override
+                    public void run(S3Util.DirectoryReplacement replacement) {
+                      if (replacement.exists(s3, maxNumberOfAttempts)) {
+                        LOG.info("Removing partition path to be replaced: " +
+                                replacement);
+                        replacement.delete(s3, maxNumberOfAttempts);
+                      }
+                    }
+                  });
           break;
         default:
           throw new RuntimeException(
@@ -146,7 +173,7 @@ public class S3PartitionedOutputCommitter extends S3MultipartOutputCommitter {
 
       threw = false;
 
-    } catch (IOException e) {
+    } catch (Throwable e) {
       throw new IOException(
           "Failed to enforce conflict resolution", e);
 
