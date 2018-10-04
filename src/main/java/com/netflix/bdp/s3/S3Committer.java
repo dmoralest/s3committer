@@ -24,9 +24,11 @@ public class S3Committer {
   public static final String NUM_THREADS = "s3.multipart.committer.num-threads";
   public static final int DEFAULT_NUM_THREADS = 8;
   public static final int DEFAULT_NUM_ATTEMPTS = 5;
+  public static final long DEFAULT_BACKOFF_TIME_MILLIS = 800;
 
   // Spark configuration keys
   public static final String SPARK_WRITE_UUID = "spark.sql.sources.writeJobUUID";
   public static final String SPARK_APP_ID = "spark.app.id";
   public static final String MAX_NUMBER_ATTEMPTS ="s3.partitioned.committer.max-attempts";
+  public static final String BACKOFF_TIME_MILLIS ="s3.multipart.committer.backoff-millis";
 }

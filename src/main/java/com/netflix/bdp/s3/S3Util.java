@@ -20,9 +20,7 @@ import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.*;
-import com.google.common.base.Objects;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
+import com.google.common.base.*;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -32,11 +30,8 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.io.EOFException;
-import java.io.File;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.Serializable;
+
+import java.io.*;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -316,6 +311,121 @@ public class S3Util {
       return "DirectoryReplacement{" +
               "path=" + path +
               '}';
+    }
+  }
+
+  static class AmazonS3WithRetries extends AmazonS3Client implements AmazonS3 {
+
+    private long backoffTime;
+    private int maxAttempts;
+
+    public void setBackoffTime(long backoffTime) {
+      this.backoffTime = backoffTime;
+    }
+
+    public void setMaxAttempts(int maxAttempts) {
+      this.maxAttempts = maxAttempts;
+    }
+
+    @Override
+    public void deleteObject(DeleteObjectRequest deleteObjectRequest) throws AmazonClientException {
+      retryWithBackoff(
+              new Function<DeleteObjectRequest, Boolean>() {
+                @Override
+                public Boolean apply(DeleteObjectRequest input) {
+                  AmazonS3WithRetries.super.deleteObject(input);
+                  return true;
+                }
+              },
+              deleteObjectRequest,
+              backoffTime,
+              maxAttempts
+      );
+    }
+
+    @Override
+    public InitiateMultipartUploadResult initiateMultipartUpload(InitiateMultipartUploadRequest initiateMultipartUploadRequest) throws AmazonClientException {
+      return retryWithBackoff(
+              new Function<InitiateMultipartUploadRequest, InitiateMultipartUploadResult>() {
+                @Override
+                public InitiateMultipartUploadResult apply(InitiateMultipartUploadRequest input) {
+                  return AmazonS3WithRetries.super.initiateMultipartUpload(input);
+                }
+              },
+              initiateMultipartUploadRequest,
+              backoffTime,
+              maxAttempts
+      );
+    }
+
+    @Override
+    public CompleteMultipartUploadResult completeMultipartUpload(CompleteMultipartUploadRequest completeMultipartUploadRequest) throws AmazonClientException {
+      return retryWithBackoff(
+              new Function<CompleteMultipartUploadRequest, CompleteMultipartUploadResult>() {
+                @Override
+                public CompleteMultipartUploadResult apply(CompleteMultipartUploadRequest input) {
+                  return AmazonS3WithRetries.super.completeMultipartUpload(input);
+                }
+              },
+              completeMultipartUploadRequest,
+              backoffTime,
+              maxAttempts
+      );
+    }
+
+    @Override
+    public UploadPartResult uploadPart(UploadPartRequest uploadPartRequest) throws AmazonClientException {
+      return retryWithBackoff(
+              new Function<UploadPartRequest, UploadPartResult>() {
+                @Override
+                public UploadPartResult apply(UploadPartRequest input) {
+                  return AmazonS3WithRetries.super.uploadPart(input);
+                }
+              },
+              uploadPartRequest,
+              backoffTime,
+              maxAttempts
+      );
+    }
+
+    @Override
+    public void abortMultipartUpload(AbortMultipartUploadRequest abortMultipartUploadRequest) throws AmazonClientException {
+      retryWithBackoff(
+              new Function<AbortMultipartUploadRequest, Boolean>() {
+                @Override
+                public Boolean apply(AbortMultipartUploadRequest input) {
+                  AmazonS3WithRetries.super.abortMultipartUpload(input);
+                  return true;
+                }
+              },
+              abortMultipartUploadRequest,
+              backoffTime,
+              maxAttempts
+      );
+    }
+  }
+
+  static <F, T> T retryWithBackoff(Function<F, T> function, F input, long backoff, int maxAttempts) {
+    return  retry(function, input, backoff, 0, maxAttempts, Optional.<Throwable>absent());
+  }
+
+  private static Double backoffTime(int collision) {
+    return (Math.pow(2, collision) - 1) / 2;
+  }
+
+  private static <F, T> T retry(Function<F, T> function, F input, long backoff, int attempt, int maxAttempts,
+                                Optional<Throwable> lastE) {
+    if (attempt > maxAttempts - 1) {
+      throw new RuntimeException(lastE.get());
+    } else {
+
+      try {
+        Thread.sleep((long) (backoffTime(attempt) * backoff));
+        return function.apply(input);
+      } catch (Throwable e) {
+        LOG.error("Retrying operation. Attempt " + (attempt + 1) + " of " + maxAttempts);
+        return retry(function, input, backoff, attempt + 1, maxAttempts, Optional.of(e));
+      }
     }
   }
 }

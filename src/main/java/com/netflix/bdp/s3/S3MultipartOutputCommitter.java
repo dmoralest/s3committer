@@ -54,6 +54,8 @@ class S3MultipartOutputCommitter extends FileOutputCommitter {
       S3MultipartOutputCommitter.class);
 
   private final Path constructorOutputPath;
+  private final int maxNumberOfAttempts;
+  private final long backoffTimeMillis;
   private final long uploadPartSize;
   private final String uuid;
   private final Path workPath;
@@ -77,6 +79,10 @@ class S3MultipartOutputCommitter extends FileOutputCommitter {
 
     this.uploadPartSize = conf.getLong(
         S3Committer.UPLOAD_SIZE, S3Committer.DEFAULT_UPLOAD_SIZE);
+    this.backoffTimeMillis = conf.getLong(
+            S3Committer.BACKOFF_TIME_MILLIS, S3Committer.DEFAULT_BACKOFF_TIME_MILLIS);
+    this.maxNumberOfAttempts = conf.getInt(
+            S3Committer.MAX_NUMBER_ATTEMPTS, S3Committer.DEFAULT_NUM_ATTEMPTS);
     // Spark will use a fake app id based on the current minute and job id 0.
     // To avoid collisions, use the YARN application ID for Spark.
     this.uuid = conf.get(S3Committer.UPLOAD_UUID, conf.get(
@@ -123,7 +129,7 @@ class S3MultipartOutputCommitter extends FileOutputCommitter {
    * @return a {@link AmazonS3} client
    */
   protected Object findClient(Path path, Configuration conf) {
-    return new AmazonS3Client();
+    return new S3Util.AmazonS3WithRetries();
   }
 
   /**
@@ -599,5 +605,9 @@ class S3MultipartOutputCommitter extends FileOutputCommitter {
           .toUpperCase(Locale.ENGLISH));
     }
     return mode;
+  }
+
+  public int getMaxNumberOfAttempts() {
+    return maxNumberOfAttempts;
   }
 }

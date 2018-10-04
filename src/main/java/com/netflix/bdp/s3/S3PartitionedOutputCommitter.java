@@ -16,7 +16,6 @@
 
 package com.netflix.bdp.s3;
 
-import com.amazonaws.services.s3.AmazonS3;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.netflix.bdp.s3.util.ConflictResolution;
@@ -38,14 +37,11 @@ public class S3PartitionedOutputCommitter extends S3MultipartOutputCommitter {
 
   private static final Logger LOG = LoggerFactory.getLogger(
       S3PartitionedOutputCommitter.class);
-  private final int maxNumberOfAttempts;
 
   public S3PartitionedOutputCommitter(Path outputPath, JobContext context)
       throws IOException {
     super(outputPath, context);
     Configuration conf = context.getConfiguration();
-    this.maxNumberOfAttempts = conf.getInt(
-            S3Committer.MAX_NUMBER_ATTEMPTS, S3Committer.DEFAULT_NUM_ATTEMPTS);
   }
 
   public S3PartitionedOutputCommitter(Path outputPath,
@@ -53,8 +49,6 @@ public class S3PartitionedOutputCommitter extends S3MultipartOutputCommitter {
       throws IOException {
     super(outputPath, context);
     Configuration conf = context.getConfiguration();
-    this.maxNumberOfAttempts = conf.getInt(
-            S3Committer.MAX_NUMBER_ATTEMPTS, S3Committer.DEFAULT_NUM_ATTEMPTS);
   }
 
   @Override
@@ -136,9 +130,6 @@ public class S3PartitionedOutputCommitter extends S3MultipartOutputCommitter {
           for (Path partition : partitions) {
             directories.add(new S3Util.DirectoryReplacement(partition));
           }
-          final AmazonS3 client = getClient(
-                  getOutputPath(context), context.getConfiguration());
-
           Tasks.foreach(directories)
                   .stopOnFailure().throwFailureWhenFinished()
                   .executeWith(getThreadPool(context))
@@ -158,10 +149,10 @@ public class S3PartitionedOutputCommitter extends S3MultipartOutputCommitter {
                   .run(new Tasks.Task<S3Util.DirectoryReplacement, RuntimeException>() {
                     @Override
                     public void run(S3Util.DirectoryReplacement replacement) {
-                      if (replacement.exists(s3, maxNumberOfAttempts)) {
+                      if (replacement.exists(s3, S3PartitionedOutputCommitter.super.getMaxNumberOfAttempts())) {
                         LOG.info("Removing partition path to be replaced: " +
                                 replacement);
-                        replacement.delete(s3, maxNumberOfAttempts);
+                        replacement.delete(s3, S3PartitionedOutputCommitter.super.getMaxNumberOfAttempts());
                       }
                     }
                   });
