@@ -129,7 +129,10 @@ class S3MultipartOutputCommitter extends FileOutputCommitter {
    * @return a {@link AmazonS3} client
    */
   protected Object findClient(Path path, Configuration conf) {
-    return new S3Util.AmazonS3WithRetries();
+    S3Util.AmazonS3WithRetries client = new S3Util.AmazonS3WithRetries();
+    client.setBackoffTime(backoffTimeMillis);
+    client.setMaxAttempts(maxNumberOfAttempts);
+    return client;
   }
 
   /**

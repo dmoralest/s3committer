@@ -23,7 +23,7 @@ public class S3Committer {
   public static final String CONFLICT_MODE = "s3.multipart.committer.conflict-mode";
   public static final String NUM_THREADS = "s3.multipart.committer.num-threads";
   public static final int DEFAULT_NUM_THREADS = 8;
-  public static final int DEFAULT_NUM_ATTEMPTS = 5;
+  public static final int DEFAULT_NUM_ATTEMPTS = 1;
   public static final long DEFAULT_BACKOFF_TIME_MILLIS = 800;
 
   // Spark configuration keys
